@@ -1,20 +1,51 @@
-const container = document.getElementById('root');
-const ajax = new XMLHttpRequest();
+
+interface Store {
+  currentPage: number;
+  feeds: NewsFeed[];
+}
+
+interface News {
+  readonly id: number;
+  readonly time_ago: string;
+  readonly title: string;
+  readonly url: string;
+  readonly user: string;
+  readonly content: string;
+}
+
+interface NewsFeed extends News{
+  readonly comments_count: number;
+  readonly points: number;
+  read?: boolean;
+}
+
+interface NewsDetail  extends News {
+  readonly comments: NewsComment[];
+}
+
+interface NewsComment extends News {
+  readonly comments: [];
+  readonly level: number;
+}
+
+
+const container: HTMLElement | null = document.getElementById('root');
+const ajax: XMLHttpRequest = new XMLHttpRequest();
 const NEWS_URL = 'https://api.hnpwa.com/v0/news/1.json';
 const CONTENT_URL = 'https://api.hnpwa.com/v0/item/@id.json';
-const store = {
+const store: Store = {
   currentPage: 1,
   feeds: [],
 }
 
-function getData(url) {
-  ajax.open('GET', url, false);
+function getData<AjaxResponse>(url: string): AjaxResponse {
+  ajax.open('GET',url, false);
   ajax.send();
 
   return JSON.parse(ajax.response);
 }
 
-function makeFeeds(feeds) {
+function makeFeeds(feeds: NewsFeed[]): NewsFeed[] {
   for (let i=0; i< feeds.length; i++) {
     feeds[i].read = false;
   }
@@ -22,8 +53,16 @@ function makeFeeds(feeds) {
   return feeds;
 }
 
-function newsFeed() {
-  let newsFeed = store.feeds;
+function updateView(html: string):void {
+  if(container) {
+    container.innerHTML = html;
+  } else {
+    console.error('최상위 컨테이너가 없어 UI를 진행하지 못합니다.')
+  }
+}
+
+function newsFeed(): void {
+  let newsFeed: NewsFeed[] = store.feeds;
   const newsList = [];
   let template = `
     <div class="bg-gray-600 min-h-screen">
@@ -51,7 +90,7 @@ function newsFeed() {
   `;
 
   if(newsFeed.length === 0) {
-    newsFeed = store.feeds = makeFeeds(getData(NEWS_URL));
+    newsFeed = store.feeds = makeFeeds(getData<NewsFeed[]>(NEWS_URL));
   }
 
   for(let i= (store.currentPage - 1) * 10; i< store.currentPage * 10; i++){
@@ -78,15 +117,15 @@ function newsFeed() {
 
 
   template = template.replace('{{__news_feed__}}', newsList.join(""));
-  template = template.replace('{{__prev_page__}}', store.currentPage > 1 ? store.currentPage - 1 : 1 );
-  template = template.replace('{{__next_page__}}', store.currentPage + 1);
+  template = template.replace('{{__prev_page__}}', String(store.currentPage > 1 ? store.currentPage - 1 : 1 ));
+  template = template.replace('{{__next_page__}}', String(store.currentPage + 1));
 
-  container.innerHTML = template;
+  updateView(template);
 }
 
-function newsDetail() {
+function newsDetail(): void {
   const id = location.hash.substring(7);
-  const newsContent = getData(CONTENT_URL.replace('@id', id));
+  const newsContent = getData<NewsDetail>(CONTENT_URL.replace('@id', id));
   console.log(newsContent)
   let template = `
     <div class="bg-gray-600 min-h-screen pb-8">
@@ -122,36 +161,35 @@ function newsDetail() {
       break;
     }
   }
+  updateView(template.replace("{{__comments__}}", makeComment(newsContent.comments)))
+}
 
-  function makeComment(comments, called = 0) {
-    const commentString = [];
+function makeComment(comments: NewsComment[]): string {
+  const commentString = [];
 
-    for(let i=0; i < comments.length; i++){
-      commentString.push(`
-        <div style="padding-left: ${called * 40}px;" class="mt-4">
-          <div class="text-gray-400">
-            <i class="fa fa-sort-up mr-2"></i>
-            <strong>${comments[i].user}</strong> ${comments[i].time_ago}
-          </div>
-          <p class="text-gray-700">${comments[i].content}</p>
+  for(let i=0; i < comments.length; i++){
+    commentString.push(`
+      <div style="padding-left: ${comments[i].level * 40}px;" class="mt-4">
+        <div class="text-gray-400">
+          <i class="fa fa-sort-up mr-2"></i>
+          <strong>${comments[i].user}</strong> ${comments[i].time_ago}
         </div>
-      `);
+        <p class="text-gray-700">${comments[i].content}</p>
+      </div>
+    `);
 
-      if(comments[i].comments.length > 0){
-       commentString.push(makeComment(comments[i].comments, called + 1));
-      }
+    if(comments[i].comments.length > 0){
+     commentString.push(makeComment(comments[i].comments));
     }
-
-    return commentString.join("");
   }
 
-  container.innerHTML = template.replace("{{__comments__}}", makeComment(newsContent.comments));
+  return commentString.join("");
 }
 
 window.addEventListener("hashchange", router);
 
 
-function router(){
+function router(): void{
   const routePath = location.hash;
 
   if(routePath === ''){
