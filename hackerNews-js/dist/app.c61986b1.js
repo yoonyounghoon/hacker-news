@@ -122,6 +122,7 @@ parcelRequire = (function (modules, cache, entry, globalName) {
 
 var container = document.getElementById('root');
 var ajax = new XMLHttpRequest();
+var content = document.createElement('div');
 var NEWS_URL = 'https://api.hnpwa.com/v0/news/1.json';
 var CONTENT_URL = 'https://api.hnpwa.com/v0/item/@id.json';
 var store = {
@@ -174,24 +175,92 @@ function () {
   function NewsDetailApi() {}
 
   NewsDetailApi.prototype.getData = function (id) {
-    return this.getRequest(CONTENT_URL.replace("@id", id));
+    return this.getRequest(CONTENT_URL.replace('@id', id));
   };
 
   return NewsDetailApi;
+}();
+
+var NewsFeedView =
+/** @class */
+function () {
+  function NewsFeedView() {
+    var api = new NewsFeedApi();
+    var newsFeed = store.feeds;
+    var template = "\n        <div class=\"bg-gray-600 min-h-screen\">\n          <div class=\"bg-white text-xl\">\n            <div class=\"mx-auto px-4\">\n              <div class=\"flex justify-between items-center py-6\">\n                <div class=\"flex justify-start\">\n                  <h1 class=\"font-extrabold\">Hacker News</h1>\n                </div>\n                <div class=\"items-center justify-end\">\n                  <a href=\"#/page/{{__prev_page__}}\" class=\"text-gray-500\">\n                    Previous\n                  </a>\n                  <a href=\"#/page/{{__next_page__}}\" class=\"text-gray-500 ml-4\">\n                    Next\n                  </a>\n                </div>\n              </div> \n            </div>\n          </div>\n          <div class=\"p-4 text-2xl text-gray-700\">\n            {{__news_feed__}}        \n          </div>\n        </div>\n      ";
+
+    if (newsFeed.length === 0) {
+      newsFeed = store.feeds = makeFeeds(api.getData());
+    }
+  }
+
+  NewsFeedView.prototype.render = function () {
+    var newsList = [];
+
+    for (var i = (store.currentPage - 1) * 10; i < store.currentPage * 10; i++) {
+      newsList.push("\n      <div class=\"p-6 " + (newsFeed[i].read ? 'bg-red-500' : 'bg-white') + " mt-6 rounded-lg shadow-md transition-colors duration-500 hover:bg-green-100\">\n        <div class=\"flex\">\n          <div class=\"flex-auto\">\n            <a href=\"#/show/" + newsFeed[i].id + "\">" + newsFeed[i].title + "</a>  \n          </div>\n          <div class=\"text-center text-sm\">\n            <div class=\"w-10 text-white bg-green-300 rounded-lg px-0 py-2\">" + newsFeed[i].comments_count + "</div>\n          </div>\n        </div>\n        <div class=\"flex mt-3\">\n          <div class=\"grid grid-cols-3 text-sm text-gray-500\">\n            <div><i class=\"fas fa-user mr-1\"></i>" + newsFeed[i].user + "</div>\n            <div><i class=\"fas fa-heart mr-1\"></i>" + newsFeed[i].points + "</div>\n            <div><i class=\"far fa-clock mr-1\"></i>" + newsFeed[i].time_ago + "</div>\n          </div>  \n        </div>\n      </div>    \n    ");
+    }
+
+    template = template.replace('{{__news_feed__}}', newsList.join(""));
+    template = template.replace('{{__prev_page__}}', String(store.currentPage > 1 ? store.currentPage - 1 : 1));
+    template = template.replace('{{__next_page__}}', String(store.currentPage < 3 ? store.currentPage + 1 : 3));
+    updateView(template);
+  };
+
+  NewsFeedView.prototype.makeFeeds = function (feeds) {
+    for (var i = 0; i < feeds.length; i++) {
+      feeds[i].read = false;
+    }
+
+    return feeds;
+  };
+
+  return NewsFeedView;
+}();
+
+var NewsDetailView =
+/** @class */
+function () {
+  function NewsDetailView() {
+    var template = "\n    <div class=\"bg-gray-600 min-h-screen pb-8\">\n    <div class=\"bg-white text-xl\">\n    <div class=\"mx-auto px-4\">\n    <div class=\"flex justify-between items-center py-6\">\n    <div class=\"flex justify-start\">\n    <h1 class=\"font-extrabold\">Hacker News</h1>\n    </div>\n    <div class=\"items-center justify-end\">\n    <a href=\"#/page/" + store.currentPage + "\" class=\"text-gray-500\">\n    <i class=\"fa fa-times\"></i>\n    </a>\n    </div>\n    </div>\n    </div>\n    </div>\n    \n    <div class=\"h-full border rounded-xl bg-white m-6 p-4 \">\n    <h2>" + newsContent.title + "</h2>\n    <div class=\"text-gray-400 h-20\">\n    " + newsContent.content + "\n    </div>\n    \n    {{__comments__}}\n    \n    </div>\n    </div>\n    ";
+    updateView(template.replace('{{__comments__}}', makeComment(newsContent.comments)));
+  }
+
+  NewsDetailView.prototype.render = function () {
+    var id = location.hash.substr(7);
+    var api = new NewsDetailApi();
+    var newsContent = api.getData(id);
+
+    for (var i = 0; i < store.feeds.length; i++) {
+      if (store.feeds[i].id === Number(id)) {
+        store.feeds[i].read = true;
+        break;
+      }
+    }
+  };
+
+  NewsDetailView.prototype.makeComment = function (comments) {
+    var commentString = [];
+
+    for (var i = 0; i < comments.length; i++) {
+      var comment = comments[i];
+      commentString.push("\n      <div style=\"padding-left: " + comment.level * 40 + "px;\" class=\"mt-4\">\n        <div class=\"text-gray-400\">\n          <i class=\"fa fa-sort-up mr-2\"></i>\n          <strong>" + comment.user + "</strong> " + comment.time_ago + "\n        </div>\n        <p class=\"text-gray-700\">" + comment.content + "</p>\n      </div>  \n      ");
+
+      if (comments[i].comments.length > 0) {
+        commentString.push(makeComment(comment.comments));
+      }
+    }
+
+    return commentString.join("");
+  };
+
+  return NewsDetailView;
 }();
 
 ;
 ;
 applyApiMixins(NewsFeedApi, [Api]);
 applyApiMixins(NewsDetailApi, [Api]);
-
-function makeFeeds(feeds) {
-  for (var i = 0; i < feeds.length; i++) {
-    feeds[i].read = false;
-  }
-
-  return feeds;
-}
 
 function updateView(html) {
   if (container) {
@@ -201,71 +270,20 @@ function updateView(html) {
   }
 }
 
-function newsFeed() {
-  var api = new NewsFeedApi();
-  var newsFeed = store.feeds;
-  var newsList = [];
-  var template = "\n    <div class=\"bg-gray-600 min-h-screen\">\n      <div class=\"bg-white text-xl\">\n        <div class=\"mx-auto px-4\">\n          <div class=\"flex justify-between items-center py-6\">\n            <div class=\"flex justify-start\">\n              <h1 class=\"font-extrabold\">Hacker News</h1>\n            </div>\n            <div class=\"items-center justify-end\">\n              <a href=\"#/page/{{__prev_page__}}\" class=\"text-gray-500\">\n                Previous\n              </a>\n              <a href=\"#/page/{{__next_page__}}\" class=\"text-gray-500 ml-4\">\n                Next\n              </a>\n            </div>\n          </div>\n        </div>\n      </div>\n      <div class=\"p-4 text-2xl text-gray-700\">\n        {{__news_feed__}}\n      </div>\n    </div>\n  ";
-
-  if (newsFeed.length === 0) {
-    newsFeed = store.feeds = makeFeeds(api.getData());
-  }
-
-  for (var i = (store.currentPage - 1) * 10; i < store.currentPage * 10; i++) {
-    newsList.push("\n    <div class=\"p-6 " + (newsFeed[i].read ? 'bg-red-500' : 'bg-white') + " mt-6 rounded-lg shadow-md transition-colors duration-500 hover:bg-green-100\">\n    <div class=\"flex\">\n      <div class=\"flex-auto\">\n        <a href=\"#/show/" + newsFeed[i].id + "\">" + newsFeed[i].title + "</a>\n      </div>\n      <div class=\"text-center text-sm\">\n        <div class=\"w-10 text-white bg-green-300 rounded-lg px-0 py-2\">" + newsFeed[i].comments_count + "</div>\n      </div>\n    </div>\n    <div class=\"flex mt-3\">\n      <div class=\"grid grid-cols-3 text-sm text-gray-500\">\n        <div><i class=\"fas fa-user mr-1\"></i>" + newsFeed[i].user + "</div>\n        <div><i class=\"fas fa-heart mr-1\"></i>" + newsFeed[i].points + "</div>\n        <div><i class=\"fas fa-clock mr-1\"></i>" + newsFeed[i].time_ago + "</div>\n      </div>\n    </div>\n    </div>\n    ");
-  }
-
-  template = template.replace('{{__news_feed__}}', newsList.join(""));
-  template = template.replace('{{__prev_page__}}', String(store.currentPage > 1 ? store.currentPage - 1 : 1));
-  template = template.replace('{{__next_page__}}', String(store.currentPage + 1));
-  updateView(template);
-}
-
-function newsDetail() {
-  var id = location.hash.substring(7);
-  var api = new NewsDetailApi();
-  var newsDetail = api.getData(id);
-  var template = "\n    <div class=\"bg-gray-600 min-h-screen pb-8\">\n      <div class=\"bg-white text-xl\">\n        <div class=\"mx-auto px-4\">\n          <div class=\"flex justify-between items-center py-6\">\n            <div class=\"flex justify-start\">\n              <h1 class=\"font-extrabold\">Hacker News</h1>\n            </div>\n            <div class=\"items-center justify-end\">\n              <a href=\"#/page/" + store.currentPage + "\" class=\"text-gray-500\">\n                <i class=\"fa fa-times\"></i>\n              </a>\n            </div>\n          </div>\n        </div>\n      </div>\n\n      <div class=\"h-full border rounded-xl bg-white m-6 p-4\">\n        <h2>" + newsDetail.title + "</h2>\n        <div class=\"text-gray-400 h-20\">\n          " + newsDetail.content + "\n        </div>\n\n        {{__comments__}}\n      </div>\n    </div>\n  ";
-
-  for (var i = 0; i < store.feeds.length; i++) {
-    if (store.feeds[i].id === Number(id)) {
-      store.feeds[i].read = true;
-      break;
-    }
-  }
-
-  updateView(template.replace("{{__comments__}}", makeComment(newsDetail.comments)));
-}
-
-function makeComment(comments) {
-  var commentString = [];
-
-  for (var i = 0; i < comments.length; i++) {
-    commentString.push("\n      <div style=\"padding-left: " + comments[i].level * 40 + "px;\" class=\"mt-4\">\n        <div class=\"text-gray-400\">\n          <i class=\"fa fa-sort-up mr-2\"></i>\n          <strong>" + comments[i].user + "</strong> " + comments[i].time_ago + "\n        </div>\n        <p class=\"text-gray-700\">" + comments[i].content + "</p>\n      </div>\n    ");
-
-    if (comments[i].comments.length > 0) {
-      commentString.push(makeComment(comments[i].comments));
-    }
-  }
-
-  return commentString.join("");
-}
-
-window.addEventListener("hashchange", router);
-
 function router() {
   var routePath = location.hash;
 
   if (routePath === '') {
     newsFeed();
   } else if (routePath.indexOf('#/page/') >= 0) {
-    store.currentPage = Number(routePath.substring(7));
+    store.currentPage = Number(routePath.substr(7));
     newsFeed();
   } else {
     newsDetail();
   }
 }
 
+window.addEventListener('hashchange', router);
 router();
 },{}],"../../../AppData/Local/Yarn/Data/global/node_modules/parcel-bundler/src/builtins/hmr-runtime.js":[function(require,module,exports) {
 var global = arguments[3];
@@ -295,7 +313,7 @@ var parent = module.bundle.parent;
 if ((!parent || !parent.isParcelRequire) && typeof WebSocket !== 'undefined') {
   var hostname = "" || location.hostname;
   var protocol = location.protocol === 'https:' ? 'wss' : 'ws';
-  var ws = new WebSocket(protocol + '://' + hostname + ':' + "14763" + '/');
+  var ws = new WebSocket(protocol + '://' + hostname + ':' + "11399" + '/');
 
   ws.onmessage = function (event) {
     checkedAssets = {};
